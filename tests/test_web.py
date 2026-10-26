@@ -297,7 +297,7 @@ async def test_outline_and_excerpts_reuse_one_cached_fetch(env):
     await web.fetch("anon", url, 8000)
     head = await web.fetch("anon", url, 8000, mode="outline")
     assert head.split("\n\n", 1)[1] == (
-        "# Tuning Sourdough Hydration\n## Why hydration matters\n## Adjusting for whole grain flour\n"
+        "## Why hydration matters\n## Adjusting for whole grain flour\n"
         "## Reading the dough during bulk fermentation\n### Quick checklist"
     )
     assert " · outline · " in head.splitlines()[0]
@@ -719,3 +719,14 @@ async def test_live_xda_thread_through_bunny_shield(request):
         assert second_s < first_s
     finally:
         await services.aclose()
+
+
+def test_site_suffix_and_duplicate_title_lines_are_dropped():
+    from src.core.web import _drop_title_lines, _site_title
+
+    assert _site_title("PEP 8 – Style Guide for Python Code | peps.python.org", "https://peps.python.org/pep-0008/") == "PEP 8 – Style Guide for Python Code"
+    assert _site_title("Okapi BM25 - Wikipedia", "https://en.wikipedia.org/wiki/Okapi_BM25") == "Okapi BM25"
+    assert _site_title("Rust - The Book", "https://doc.rust-lang.org/book/") == "Rust - The Book"
+    body = "PEP 8 – Style Guide\n\n# PEP 8 – Style Guide\n\n- Author: x\n\nText"
+    assert _drop_title_lines(body, "PEP 8 – Style Guide") == "- Author: x\n\nText"
+    assert _drop_title_lines("# Other\n\nText", "PEP 8") == "# Other\n\nText"

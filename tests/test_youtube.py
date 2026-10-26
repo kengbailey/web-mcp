@@ -342,7 +342,7 @@ async def test_video_with_api_key():
     title, line, _, body = out.split("\n", 3)
     assert title == "Never Gonna Give You Up"
     assert line == f"Rick Astley · 3:33 · 2009-10-25 · 1.7B views · 18.4M likes · 2.4M comments · {WATCH}"
-    assert body.startswith("Line one.\nddd") and re.search(r"d \[\+1k chars: [\w-]{12}\]$", body)
+    assert body.startswith("Line one.\nddd") and re.search(r"d \[\+3.5k chars: [\w-]{12}\]$", body)
     assert "dislike" not in out.lower() and "null" not in out
     query = parse_qs(urlparse(str(seen[0].url)).query)
     assert seen[0].url.path == "/youtube/v3/videos"

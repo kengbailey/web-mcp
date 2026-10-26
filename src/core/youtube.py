@@ -43,7 +43,7 @@ API_BLOCK = "yt:transcript-api"
 COMMENTS = "youtube_comments"
 PAGE_SIZE = 20
 MAX_CAPTION_BYTES = 8 * 1024 * 1024
-DESCRIPTION_CHARS = 4000
+DESCRIPTION_CHARS = 1500  # long descriptions are mostly links/chapters; rest via cursor
 COMMENT_CHARS = 500
 # Caption failures that STT cannot fix (the audio path needs the same extraction).
 NO_FALLBACK = {INVALID_ARGUMENT, NOT_FOUND, UPSTREAM_BLOCKED, RATE_LIMITED}

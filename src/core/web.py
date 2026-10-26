@@ -356,6 +356,33 @@ def _forum(html: str, url: str, links: bool) -> Doc | None:
     return None
 
 
+_TITLE_SUFFIX = re.compile(r"\s+[|\-–—·:]\s+([^|\-–—·:]{2,40})$")
+
+
+def _site_title(title: str, url: str) -> str:
+    """Drop a trailing " | Site" / " - Wikipedia" when the suffix names the host."""
+    title = oneline(title)
+    match = _TITLE_SUFFIX.search(title)
+    host = (urlsplit(url).hostname or "").lower().removeprefix("www.")
+    if match and match.start() > 0:
+        site = re.sub(r"[^a-z0-9.]", "", match.group(1).lower())
+        if site and (site in host or host.split(".")[0] in site):
+            return title[: match.start()]
+    return title
+
+
+def _drop_title_lines(body: str, title: str) -> str:
+    """The header already carries the title; drop copies of it at the top of the body."""
+    if not title:
+        return body
+    key = oneline(title).casefold()
+    lines = body.split("\n")
+    i = 0
+    while i < min(len(lines), 6) and (not lines[i].strip() or oneline(lines[i].lstrip("#")).casefold() == key):
+        i += 1
+    return "\n".join(lines[i:]) if i and any(lines[:i]) else body
+
+
 def extract_html(html: str, url: str, links: bool, source: str) -> tuple[Doc | None, str]:
     """Returns (doc, reason); a non-empty reason asks for the browser.
 
@@ -373,7 +400,9 @@ def extract_html(html: str, url: str, links: bool, source: str) -> tuple[Doc | N
         body2, footer2 = clean_markdown(md2, url, links)
         if len(body2) > len(body):
             title, body, footer = title2 or title, body2, footer2
-    doc = Doc(url=url, source=source, text=_compose(body, footer), title=trunc(title or _html_title(html), 200))
+    title = _site_title(title or _html_title(html), url)
+    body = _drop_title_lines(body, title)
+    doc = Doc(url=url, source=source, text=_compose(body, footer), title=trunc(title, 200))
     if len(body) < SHORT:
         return doc, "short"
     return doc, "shell" if is_app_shell(html, len(body)) else ""
