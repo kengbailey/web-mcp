@@ -75,4 +75,6 @@ if [ -n "$tunnel_token" ] && { [ -z "$authkit_domain" ] || [ -z "$base_url" ]; }
 fi
 
 cd "$APP_DIR"
-docker compose -f docker-compose.cloud.yml --env-file "$ENV_FILE" up -d --build
+# --remove-orphans: the v3 rename (webintel-mcp -> web-mcp) and the dropped SearxNG leave
+# old containers that restart on boot and would hold 127.0.0.1:3090 / run a second tunnel.
+docker compose -f docker-compose.cloud.yml --env-file "$ENV_FILE" up -d --build --remove-orphans
