@@ -38,7 +38,7 @@ def test_clip_respects_token_budget_for_cjk():
 
 
 def test_renderers():
-    assert num(1234) == "1.2k" and num(2_500_000) == "2.5M" and num(12) == "12" and num(None) == ""
+    assert num(1234) == "1.2k" and num(2_500_000) == "2.5M" and num(1_712_300_000) == "1.7B" and num(12) == "12" and num(None) == ""
     assert ago(1000, now=1000 + 3 * 86400) == "3d" and ago(None) == ""
     assert trunc("a  b\n c", 10) == "a b c" and trunc("x" * 20, 10) == "x" * 9 + "…"
     assert join("a", "", None, "b") == "a · b"

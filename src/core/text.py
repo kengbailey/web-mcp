@@ -69,7 +69,7 @@ def num(value: int | float | str | None) -> str:
         n = float(value)
     except (TypeError, ValueError):
         return str(value)
-    for unit, size in (("M", 1e6), ("k", 1e3)):
+    for unit, size in (("B", 1e9), ("M", 1e6), ("k", 1e3)):
         if abs(n) >= size:
             return f"{n / size:.1f}".rstrip("0").rstrip(".") + unit
     return str(int(n))
