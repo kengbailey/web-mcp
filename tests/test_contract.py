@@ -39,3 +39,25 @@ async def test_errors_are_text_without_structured_content(make_client):
     assert result.is_error
     assert result.structured_content is None
     assert result.content[0].text.startswith("ERROR CURSOR_EXPIRED: ")
+
+
+def test_owner_is_stable_across_token_rotation(monkeypatch):
+    from fastmcp.server.auth.auth import AccessToken
+
+    from src.server.tools import common
+
+    def as_token(token, subject):
+        return AccessToken(token=token, client_id="openwebui", scopes=[], subject=subject, claims={"iss": "https://auth"})
+
+    monkeypatch.setattr(common, "get_access_token", lambda: as_token("t1", "user-a"))
+    first = common.owner()
+    monkeypatch.setattr(common, "get_access_token", lambda: as_token("t2-rotated", "user-a"))
+    assert common.owner() == first
+    monkeypatch.setattr(common, "get_access_token", lambda: as_token("t3", "user-b"))
+    assert common.owner() != first
+    monkeypatch.setattr(common, "get_access_token", lambda: as_token("t4", None))
+    no_sub = common.owner()
+    monkeypatch.setattr(common, "get_access_token", lambda: as_token("t5", None))
+    assert common.owner() != no_sub  # no subject: never share across tokens
+    monkeypatch.setattr(common, "get_access_token", lambda: None)
+    assert common.owner() == "anon"

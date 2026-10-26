@@ -58,6 +58,9 @@ def main() -> None:
     parser.add_argument("--transport", choices=["http", "sse"], default=os.getenv("MCP_TRANSPORT", "http"))
     args = parser.parse_args()
     logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+    # httpx logs full request URLs at INFO; keep provider URLs (and any query secrets) out of logs.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
     mcp.run(transport=args.transport, host=args.host, port=args.port)
 
 

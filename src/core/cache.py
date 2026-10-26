@@ -15,6 +15,13 @@ from typing import Any, Awaitable, Callable
 from .errors import CURSOR_EXPIRED, INVALID_ARGUMENT, Fail
 
 MISSING = object()
+LOAD_TIMEOUT = 900.0  # hard cap for a detached load (STT of a long video is the slowest)
+
+
+def _retrieve(task: asyncio.Task) -> None:
+    """Mark a finished load's exception as retrieved when no caller is left waiting."""
+    if not task.cancelled():
+        task.exception()
 
 
 def approx_size(value: Any) -> int:
@@ -72,27 +79,30 @@ class TTLCache:
         _, size, _ = self._entries.pop(key)
         self._bytes -= size
 
-    async def get_or_load(self, key: str, ttl: float, load: Callable[[], Awaitable[Any]]) -> Any:
+    async def get_or_load(
+        self, key: str, ttl: float, load: Callable[[], Awaitable[Any]], timeout: float = LOAD_TIMEOUT
+    ) -> Any:
+        """Load once per key. The load runs as its own bounded task, so a caller that is
+        cancelled (deadline, disconnect) neither cancels it for the other waiters nor
+        wastes paid work: the result is still cached for the next call."""
         value = self.get(key, MISSING)
         if value is not MISSING:
             return value
-        if key in self._inflight:
-            return await asyncio.shield(self._inflight[key])
-        future: asyncio.Future = asyncio.get_running_loop().create_future()
-        self._inflight[key] = future
-        try:
-            value = await load()
-        except BaseException as exc:
-            if not future.done():
-                future.set_exception(exc)
-                future.exception()  # mark retrieved when nobody else is waiting
-            raise
-        else:
-            self.set(key, value, ttl)
-            future.set_result(value)
-            return value
-        finally:
-            self._inflight.pop(key, None)
+        task = self._inflight.get(key)
+        if task is None:
+
+            async def run() -> Any:
+                try:
+                    async with asyncio.timeout(timeout):
+                        result = await load()
+                    self.set(key, result, ttl)
+                    return result
+                finally:
+                    self._inflight.pop(key, None)
+
+            task = self._inflight[key] = asyncio.get_running_loop().create_task(run())
+            task.add_done_callback(_retrieve)
+        return await asyncio.shield(task)
 
 
 class CursorStore:

@@ -581,7 +581,7 @@ class Reddit:
         desc = tidy(d["public_description"] or d["description"] or "")
         if desc:
             url = f"{WWW}/r/{name}/"
-            inline, suffix = self.s.pages.body(owner, f"reddit:about:{name.lower()}", url, "reddit", desc, INFO_CHARS)
+            inline, suffix = self.s.pages.body(owner, f"reddit:aboutdoc:{name.lower()}", url, "reddit", desc, INFO_CHARS)
             lines.append(inline + (f" {suffix}" if suffix else ""))
         return "\n".join(lines)
 

@@ -318,7 +318,7 @@ class YouTube:
     async def info(self, ident: str) -> dict:
         proxy = self.settings.youtube_proxy_url
         return await self.services.cache.get_or_load(
-            f"yt:info:{ident}", INFO_TTL, lambda: asyncio.to_thread(extract_info, ident, proxy)
+            f"yt:info:{ident}", INFO_TTL, lambda: self.services.run("yt", extract_info, ident, proxy)
         )
 
     async def _api(self, endpoint: str, params: dict) -> dict:
@@ -326,7 +326,7 @@ class YouTube:
         if not key:
             raise Fail(NOT_CONFIGURED, "YOUTUBE_API_KEY is required")
         response = await self.services.net.client("youtube").get(
-            API_URL + endpoint, params={**params, "key": key}, timeout=15
+            API_URL + endpoint, params=params, headers={"x-goog-api-key": key}, timeout=15
         )
         if response.status_code >= 400:
             try:
@@ -414,7 +414,7 @@ class YouTube:
             proxy = self.settings.youtube_proxy_url
             try:
                 found = await asyncio.wait_for(
-                    asyncio.to_thread(fetch_api_transcript, ident, lang, proxy), API_TIMEOUT
+                    self.services.run("yt", fetch_api_transcript, ident, lang, proxy), API_TIMEOUT
                 )
             except Exception as exc:  # noqa: BLE001 - any fast-path failure falls through
                 if _blocked(exc):

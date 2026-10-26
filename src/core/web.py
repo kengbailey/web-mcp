@@ -725,13 +725,13 @@ class Web:
 
     async def _extract(self, got: Fetched, links: bool) -> tuple[Doc | None, str]:
         if got.kind == "pdf":
-            return Doc(url=got.url, source="pdf", text=await asyncio.to_thread(extract_pdf, got.data)), ""
+            return Doc(url=got.url, source="pdf", text=await self.s.run("pdf", extract_pdf, got.data)), ""
         text = _decode(got.data, got.charset)
         if got.kind == "markdown":
             return Doc(url=got.url, source="web", text=_compose(*clean_markdown(text, got.url, links))), ""
         if got.kind == "text":
             return Doc(url=got.url, source="web", text=_plain(text)), ""
-        return await asyncio.to_thread(extract_html, text, got.url, links, "web")
+        return await self.s.run("cpu", extract_html, text, got.url, links, "web")
 
     # -- browser path
 
@@ -743,7 +743,7 @@ class Web:
         except Exception as exc:  # BrowserError, Playwright missing, browser crash
             log.warning("browser failed for %s: %s: %s", _host(url), type(exc).__name__, str(exc)[:200])
             return None, "browser failed", 0
-        doc, reason = await asyncio.to_thread(extract_html, rendered.html, rendered.url, links, "browser")
+        doc, reason = await self.s.run("cpu", extract_html, rendered.html, rendered.url, links, "browser")
         if keep_cookies and reason != "challenge" and rendered.cookies:
             jar = Jar(rendered.user_agent, rendered.cookies, time.monotonic() + JAR_TTL)
             for host in {_host(url), _host(rendered.url)}:

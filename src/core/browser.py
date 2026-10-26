@@ -135,12 +135,14 @@ class Browser:
                 entry.busy += 1  # before releasing the lock, so LRU eviction skips it
             try:
                 return entry, await entry.context.new_page()
-            except Exception:
-                # Context or browser died; drop it and retry once with a fresh one.
-                entry.busy -= 1
-                await self._drop(host)
-                if attempt:
+            except BaseException as exc:
+                entry.busy -= 1  # also on cancellation, or the context could never be evicted
+                if attempt or not isinstance(exc, Exception):
                     raise
+                # Context or browser died; drop it (if nobody else is using it) and retry once.
+                async with self._context_lock:
+                    if self._contexts.get(host) is entry and not entry.busy:
+                        await self._drop(host)
         raise AssertionError("unreachable")
 
     async def _context(self, host: str) -> _Context:
@@ -162,10 +164,15 @@ class Browser:
                 service_workers="block",  # keeps every request visible to the route check
                 accept_downloads=False,
             )
-            await context.add_init_script(INIT_SCRIPT)
-            await context.route("**/*", self._route)
-            with contextlib.suppress(AttributeError):
+            try:
+                await context.add_init_script(INIT_SCRIPT)
+                await context.route("**/*", self._route)
+                # Required: page JS must not open WebSockets to hosts the route check would refuse.
                 await context.route_web_socket("**/*", self._route_ws)
+            except BaseException:
+                with contextlib.suppress(Exception):
+                    await context.close()
+                raise
             entry = self._contexts[host] = _Context(context, now)
         entry.used = now
         self._contexts.move_to_end(host)

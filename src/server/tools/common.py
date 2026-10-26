@@ -13,6 +13,7 @@ from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_access_token
 from fastmcp.tools import ToolResult
+from mcp.server.auth.provider import principal_components
 from mcp.types import TextContent, ToolAnnotations
 
 from ...core import errors
@@ -61,9 +62,18 @@ def tool(mcp: FastMCP, deadline: float = DEFAULT_DEADLINE) -> Callable:
 
 
 def owner() -> str:
-    """Cursor scope: bearer-token hash when authenticated, else the shared LAN principal."""
+    """Cursor scope: the authenticated principal, else the shared LAN principal.
+
+    Keyed on (client_id, issuer, subject) so token rotation mid-pagination keeps cursors
+    valid; without a subject, fall back to the token itself so users who share one OAuth
+    client never share cursors.
+    """
     token = get_access_token()
-    return hashlib.sha256(token.token.encode()).hexdigest() if token else "anon"
+    if token is None:
+        return "anon"
+    client_id, issuer, subject = principal_components(token)
+    identity = f"{client_id}|{issuer}|{subject}" if subject else "token|" + token.token
+    return hashlib.sha256(identity.encode()).hexdigest()
 
 
 def svc() -> Services:

@@ -170,3 +170,64 @@ async def test_pooled_clients_never_store_cookies():
         await client.get(url)
     await net.aclose()
     assert seen == [None, None, None]
+
+
+@pytest.mark.asyncio
+async def test_single_flight_survives_a_cancelled_caller():
+    cache = TTLCache()
+    calls = 0
+    release = asyncio.Event()
+
+    async def load():
+        nonlocal calls
+        calls += 1
+        await release.wait()
+        return "paid result"
+
+    leader = asyncio.create_task(cache.get_or_load("stt", 60, load))
+    await asyncio.sleep(0)
+    waiter = asyncio.create_task(cache.get_or_load("stt", 60, load))
+    await asyncio.sleep(0)
+    leader.cancel()  # e.g. the first client hit its deadline or disconnected
+    await asyncio.sleep(0)
+    release.set()
+    assert await waiter == "paid result"
+    assert leader.cancelled() and calls == 1
+    assert cache.get("stt") == "paid result"  # cached even though the leader left
+
+
+@pytest.mark.asyncio
+async def test_single_flight_load_timeout():
+    cache = TTLCache()
+
+    async def slow():
+        await asyncio.sleep(10)
+
+    with pytest.raises(TimeoutError):
+        await cache.get_or_load("k", 60, slow, timeout=0.01)
+
+
+@pytest.mark.asyncio
+async def test_web_route_refuses_private_address_at_connect_time(monkeypatch):
+    """DNS rebinding: validate_url saw a public IP, the connect-time lookup gets 127.0.0.1."""
+    import socket
+
+    import httpx
+
+    from src.core.config import Settings
+    from src.core.net import Net, PublicOnlyBackend
+
+    async def rebinding(host, port, type=0):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", port))]
+
+    net = Net(Settings())
+    client = net.client("web")
+    pool = client._transport._pool
+    assert isinstance(pool._network_backend, PublicOnlyBackend)
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", rebinding)
+    with pytest.raises(httpx.ConnectError, match="non-public"):
+        await client.get("http://rebind.example/")
+    await net.aclose()
+    proxied = Net(Settings(proxy_url="http://proxy:8888")).client("web")
+    # Behind PROXY_URL the proxy resolves names, so the guard is not applied (documented).
+    assert not isinstance(getattr(proxied._transport._pool, "_network_backend", None), PublicOnlyBackend)

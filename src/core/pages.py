@@ -50,7 +50,10 @@ class Pager:
         body = clip(doc.text[offset:], max_chars) if offset < total else ""
         end = offset + len(body)
         has_more = end < total or bool(doc.next_url)
-        cursor = self.cursors.put(owner, CONTENT, (key, end)) if has_more else None
+        cursor = None
+        if has_more:
+            cursor = self.cursors.put(owner, CONTENT, (key, end))
+            self.cache.get(key, touch=DOC_TTL)  # the doc must live at least as long as the cursor
         if offset == 0 and end == total:
             span = f"{total} chars"
         else:

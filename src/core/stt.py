@@ -42,6 +42,13 @@ log = logging.getLogger("web_mcp.stt")
 AUDIO_FORMAT = "ba[acodec=opus]/ba"
 AUDIO_SORT = ["lang", "+abr"]  # original-language track, smallest bitrate
 MAX_UPLOAD = 24_000_000  # OpenRouter rejects requests over 25 MB
+MAX_CONCURRENT_JOBS = 2  # bounds paid STT spend and temp disk; extra jobs queue
+
+
+@contextlib.asynccontextmanager
+async def _workdir():
+    with tempfile.TemporaryDirectory(prefix="web_mcp_stt_", ignore_cleanup_errors=True) as root:
+        yield Path(root)
 SEGMENT_SECONDS = 900
 CONCURRENCY = 4
 REQUEST_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
@@ -130,9 +137,9 @@ async def report(progress: Progress, value: float, message: str) -> None:
         log.debug("progress report failed", exc_info=True)
 
 
-async def _in_thread(fn: Callable[[], T], cancel: threading.Event, grace: float = 5.0) -> T:
+async def _in_thread(fn: Callable[[], T], cancel: threading.Event, executor: Any = None, grace: float = 5.0) -> T:
     """Run ``fn`` in a worker; on task cancellation set ``cancel`` and give it time to stop."""
-    future = asyncio.get_running_loop().run_in_executor(None, fn)
+    future = asyncio.get_running_loop().run_in_executor(executor, fn)
     try:
         return await asyncio.shield(future)
     except asyncio.CancelledError:
@@ -281,11 +288,15 @@ async def transcribe(services: Any, info: dict, language: str, progress: Progres
             last[0] = pct
             asyncio.run_coroutine_threadsafe(report(progress, 0.4 * pct, f"downloading audio {pct}%"), loop)
 
-    with tempfile.TemporaryDirectory(prefix="web_mcp_stt_", ignore_cleanup_errors=True) as root:
-        directory = Path(root)
+    slots = services.component("stt_slots", lambda _: asyncio.Semaphore(MAX_CONCURRENT_JOBS))
+    if slots.locked():
+        await report(progress, 0, "waiting for a speech-to-text slot")
+    async with slots, _workdir() as directory:
         await report(progress, 0, "downloading audio")
         audio = await _in_thread(
-            lambda: download(info, directory, s.youtube_proxy_url, cancel, on_progress), cancel
+            lambda: download(info, directory, s.youtube_proxy_url, cancel, on_progress),
+            cancel,
+            services.executor("yt") if hasattr(services, "executor") else None,
         )
         if audio.stat().st_size <= MAX_UPLOAD:
             parts = [audio]

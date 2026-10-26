@@ -346,7 +346,8 @@ async def test_video_with_api_key():
     assert "dislike" not in out.lower() and "null" not in out
     query = parse_qs(urlparse(str(seen[0].url)).query)
     assert seen[0].url.path == "/youtube/v3/videos"
-    assert query["part"] == ["snippet,statistics,contentDetails"] and query["key"] == ["yk"]
+    assert query["part"] == ["snippet,statistics,contentDetails"] and "key" not in query
+    assert seen[0].headers["x-goog-api-key"] == "yk"  # header, so the key never lands in URL logs
     await YouTube(services).video("me", VID)
     assert len(seen) == 1  # metadata cached
 
@@ -402,7 +403,7 @@ async def test_comments_render_and_page_through_pending_then_upstream():
     assert lines[3].endswith(" (↳ 1 reply)") and len(lines[3]) < 600
     assert lines[-1].startswith("more: ") and lines[-2] == ""
     assert seen[0] == {"part": "snippet", "maxResults": "20", "textFormat": "plainText", "videoId": VID,
-                       "order": "relevance", "searchTerms": "chorus", "key": "yk"}
+                       "order": "relevance", "searchTerms": "chorus"}
     cursor = lines[-1][6:]
 
     out2 = await yt.comments("me", cursor=cursor)
