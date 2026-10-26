@@ -1,5 +1,5 @@
 """
-Authentication for WebIntel MCP (cloud / multi-client deployments).
+Authentication for Web MCP (cloud / multi-client deployments).
 
 Two connection types are supported and composed via FastMCP ``MultiAuth``:
 

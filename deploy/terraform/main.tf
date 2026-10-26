@@ -53,11 +53,9 @@ resource "google_service_account" "webintel" {
   display_name = "WebIntel MCP VM"
 }
 
-resource "google_project_iam_member" "secret_accessor" {
-  project = var.project_id
-  role    = "roles/secretmanager.secretAccessor"
-  member  = "serviceAccount:${google_service_account.webintel.email}"
-}
+# Project-level secretAccessor removed 2026-10-08 (security audit): it let this
+# VM read every secret in the project, including other services'. Access is
+# granted per secret below (google_secret_manager_secret_iam_member.webintel).
 
 # --- Secrets (empty containers; values seeded out-of-band via seed-secrets.sh
 # so secret values never enter Terraform state) ---
@@ -76,6 +74,8 @@ locals {
     "webintel-stt-endpoint",
     "webintel-stt-model",
     "webintel-stt-api-key",
+    "webintel-exa-api-key",
+    "webintel-youtube-api-key",
     "webintel-cloudflare-tunnel-token",
   ]
 }

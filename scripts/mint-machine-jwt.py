@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Mint an HS256 JWT for headless WebIntel MCP clients.
+"""Mint an HS256 JWT for headless Web MCP clients.
 
-The WebIntel MCP server accepts machine JWTs signed with ``MCP_MACHINE_SECRET``
+The Web MCP server accepts machine JWTs signed with ``MCP_MACHINE_SECRET``
 (see ``src/server/auth.py``). This mints one with the correct issuer and
 audience so a harness can send::
 
@@ -30,7 +30,7 @@ def _b64url(data: bytes) -> str:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Mint an HS256 machine JWT for WebIntel MCP.")
+    ap = argparse.ArgumentParser(description="Mint an HS256 machine JWT for Web MCP.")
     ap.add_argument("--ttl-hours", type=float, default=24.0, help="token lifetime in hours (default 24)")
     ap.add_argument("--subject", default="machine", help="JWT `sub` claim (default 'machine')")
     args = ap.parse_args()

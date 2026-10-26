@@ -1,6 +1,6 @@
 # Cloud Deployment (GCP)
 
-Provisions a single GCE VM running WebIntel MCP + bundled SearxNG behind a
+Provisions a single GCE VM running Web MCP behind a
 Cloudflare Tunnel, with OAuth 2.1 (WorkOS AuthKit) + HMAC-JWT auth. See
 `doc/cloud-auth.md` for the auth model.
 
@@ -38,15 +38,33 @@ MCP_BASE_URL=https://mcp.example.com
 MCP_RESOURCE_URL=https://mcp.example.com/mcp
 MCP_MACHINE_SECRET=<python -c 'import secrets;print(secrets.token_urlsafe(48))'>
 MCP_MACHINE_ISSUER=webintel-internal
-MCP_REQUIRED_SCOPES=webintel:read
+MCP_REQUIRED_SCOPES=web-mcp:read
 REDDIT_CLIENT_ID=...
 REDDIT_CLIENT_SECRET=...
-REDDIT_USER_AGENT=python:webintel-mcp:v1.0.0 (by /u/you)
-STT_ENDPOINT=https://api.groq.com/openai/v1
-STT_MODEL=whisper-large-v3
-STT_API_KEY=...
+REDDIT_USER_AGENT=python:web-mcp:v3 (by /u/you)
+EXA_API_KEY=...
+YOUTUBE_API_KEY=...
+STT_ENDPOINT=https://openrouter.ai/api/v1
+STT_MODEL=nvidia/parakeet-tdt-0.6b-v3
+STT_API_KEY=<OpenRouter key>
 CLOUDFLARE_TUNNEL_TOKEN=...
 ```
+
+`EXA_API_KEY` and `YOUTUBE_API_KEY` need the `webintel-exa-api-key` /
+`webintel-youtube-api-key` secret containers: run `terraform apply` once after
+upgrading to v3 (additive; nothing is replaced).
+
+**Do not edit `deploy/terraform/scripts/vm-startup.sh` casually:** it is the instance's
+`metadata_startup_script`, which Terraform cannot update in place, so any change recreates
+the VM on the next `terraform apply`. (Its clone URL still says `webintel-mcp`; GitHub
+redirects it to `web-mcp`.)
+
+**Naming:** the product was renamed to Web MCP (`web-mcp`), but live infrastructure
+keeps its original `webintel` identifiers on purpose: GCP resource names (VM
+`webintel-mcp`, `webintel-ip`, `webintel-net`, `webintel-vm`), Secret Manager
+`webintel-*` secrets, `/opt/webintel-mcp`, the `webintel.kengbailey.com` hostname and
+the `webintel-internal` machine-JWT issuer. Renaming them would recreate the VM,
+release the static IP, drop secret values and invalidate issued tokens.
 
 Seed them (run from a machine with gcloud):
 
@@ -64,7 +82,8 @@ gcloud compute ssh webintel-mcp --zone=us-central1-a --tunnel-through-iap \
 ## Cloudflare tunnel
 
 Create a tunnel in the Cloudflare Zero Trust dashboard, point its public
-hostname (e.g. `https://mcp.example.com`) at `http://webintel-mcp:3090`, and
+hostname (e.g. `https://mcp.example.com`) at `http://webintel-mcp:3090` (a network
+alias of the `web-mcp` service; `http://web-mcp:3090` also works), and
 put the tunnel token in the `webintel-cloudflare-tunnel-token` secret. The
 `cloudflared` container in `docker-compose.cloud.yml` runs the tunnel.
 

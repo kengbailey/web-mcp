@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fetch WebIntel secrets from Secret Manager and (re)start the cloud stack.
+# Fetch Web MCP secrets from Secret Manager and (re)start the cloud stack.
 # Idempotent and re-runnable. Run on the VM as root (or via `gcloud compute ssh`).
 #
 #   sudo /opt/webintel-mcp/deploy/scripts/bootstrap.sh
@@ -35,6 +35,8 @@ pairs=(
   "STT_ENDPOINT=webintel-stt-endpoint"
   "STT_MODEL=webintel-stt-model"
   "STT_API_KEY=webintel-stt-api-key"
+  "EXA_API_KEY=webintel-exa-api-key"
+  "YOUTUBE_API_KEY=webintel-youtube-api-key"
   "CLOUDFLARE_TUNNEL_TOKEN=webintel-cloudflare-tunnel-token"
 )
 
@@ -73,4 +75,6 @@ if [ -n "$tunnel_token" ] && { [ -z "$authkit_domain" ] || [ -z "$base_url" ]; }
 fi
 
 cd "$APP_DIR"
-docker compose -f docker-compose.cloud.yml --env-file "$ENV_FILE" up -d --build
+# --remove-orphans: the v3 rename (webintel-mcp -> web-mcp) and the dropped SearxNG leave
+# old containers that restart on boot and would hold 127.0.0.1:3090 / run a second tunnel.
+docker compose -f docker-compose.cloud.yml --env-file "$ENV_FILE" up -d --build --remove-orphans

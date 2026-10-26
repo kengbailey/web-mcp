@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Tuning Sourdough Hydration | The Bread Notes</title>
+  <meta property="og:title" content="Tuning Sourdough Hydration">
+  <link rel="stylesheet" href="/static/site.css">
+  <script>window.dataLayer = window.dataLayer || [];</script>
+</head>
+<body>
+  <header>
+    <nav>
+      <a href="/">Home</a> <a href="/recipes/">Recipes</a> <a href="/about/">About</a> <a href="/subscribe/">Subscribe</a>
+    </nav>
+  </header>
+  <main>
+    <article>
+      <h1>Tuning Sourdough Hydration</h1>
+      <p class="byline">By Ada Baker</p>
+      <p><img src="/img/loaf-hero.jpg" alt="A crusty loaf on a cooling rack"></p>
+      <p>Hydration is the ratio of water to flour in a dough, expressed as a percentage of the flour weight.
+        A dough with 1000 grams of flour and 750 grams of water sits at seventy-five percent hydration, which is a
+        comfortable middle ground for most home bakers working with a <a href="/glossary/levain">levain</a> and
+        a mix of bread flour and whole wheat.</p>
+      <h2>Why hydration matters</h2>
+      <p>Higher hydration produces a more open crumb and a thinner, crackly crust, but it also makes the dough
+        stickier and harder to shape. Lower hydration gives a tighter crumb that is easier to slice for sandwiches.
+        The <a href="https://example.org/flour-guide">flour guide</a> explains how protein content changes how much
+        water a flour can absorb before the dough turns slack.</p>
+      <p><img src="/img/chart.png" alt="Image 3: hydration chart"> <img src="/img/spacer.gif" alt=""></p>
+      <h2>Adjusting for whole grain flour</h2>
+      <p>Whole wheat and rye flours absorb noticeably more water than white flour because bran and germ soak up
+        moisture slowly. When you swap twenty percent of the white flour for whole wheat, add roughly five percent
+        more water and give the dough an extra thirty minutes of autolyse so the bran can hydrate fully.
+        See the <a href="/glossary/autolyse">autolyse</a> entry and the <a href="/glossary/levain">levain</a> notes.</p>
+      <h2>Reading the dough during bulk fermentation</h2>
+      <p>Temperature changes everything during bulk fermentation. A warm kitchen speeds fermentation and makes a
+        high hydration dough feel looser, so shorten the bulk and add an extra set of coil folds to build strength.
+        In a cold kitchen the same dough may need several more hours before it is airy, domed and jiggly.</p>
+      <pre><code>def hydration(water_g, flour_g):
+    return round(100 * water_g / flour_g, 1)
+</code></pre>
+      <table>
+        <tr><th>Style</th><th>Hydration</th></tr>
+        <tr><td>Sandwich loaf</td><td>65%</td></tr>
+        <tr><td>Country loaf</td><td>75%</td></tr>
+        <tr><td>Open crumb</td><td>85%</td></tr>
+      </table>
+      <h3>Quick checklist</h3>
+      <ul>
+        <li>Weigh flour and water, never use cups.</li>
+        <li>Hold back ten percent of the water and add it during mixing.</li>
+        <li>Note the kitchen temperature next to every bake.</li>
+      </ul>
+    </article>
+  </main>
+  <footer>
+    <p>Copyright The Bread Notes. <a href="/privacy">Privacy</a> <a href="/terms">Terms</a></p>
+  </footer>
+</body>
+</html>
