@@ -43,6 +43,7 @@ def test_renderers():
     assert trunc("a  b\n c", 10) == "a b c" and trunc("x" * 20, 10) == "x" * 9 + "…"
     assert join("a", "", None, "b") == "a · b"
     assert tidy("a  b \n\n\n\nc") == "a b\n\nc"
+    assert tidy("- a\n  - b   c\n\tcode") == "- a\n  - b c\n    code"
 
 
 def test_ttl_cache_expiry_lru_and_touch():
@@ -148,3 +149,24 @@ def test_fail_text_and_status_mapping():
     assert str(Fail("NOT_FOUND", "gone")) == "ERROR NOT_FOUND: gone"
     assert for_status(429, "Exa").code == "RATE_LIMITED"
     assert for_status(500, "Exa").code == "UPSTREAM_ERROR"
+
+
+@pytest.mark.asyncio
+async def test_pooled_clients_never_store_cookies():
+    import httpx
+
+    from src.core.config import Settings
+    from src.core.net import Net
+
+    seen = []
+
+    def handler(request):
+        seen.append(request.headers.get("cookie"))
+        return httpx.Response(200, headers={"set-cookie": "sid=secret; Path=/"})
+
+    net = Net(Settings(), transport=httpx.MockTransport(handler))
+    client = net.client("web")
+    for url in ("https://a.example/", "https://a.example/again", "https://b.example/"):
+        await client.get(url)
+    await net.aclose()
+    assert seen == [None, None, None]

@@ -57,9 +57,17 @@ def trunc(text: str | None, limit: int) -> str:
 
 
 def tidy(text: str) -> str:
-    """Collapse horizontal whitespace runs and 3+ blank lines; strip trailing spaces."""
-    lines = [_WS.sub(" ", line).rstrip() for line in text.splitlines()]
-    return _BLANKS.sub("\n\n", "\n".join(lines)).strip()
+    """Collapse inner whitespace runs and 3+ blank lines; strip trailing spaces.
+
+    Leading indentation is kept (nested lists, code); tabs become four spaces.
+    """
+    lines = []
+    for line in text.splitlines():
+        body = line.lstrip(" \t")
+        indent = line[: len(line) - len(body)].replace("\t", "    ")
+        body = _WS.sub(" ", body).rstrip()
+        lines.append(indent + body if body else "")
+    return _BLANKS.sub("\n\n", "\n".join(lines)).strip("\n")
 
 
 def num(value: int | float | str | None) -> str:

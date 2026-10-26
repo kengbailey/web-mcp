@@ -2,10 +2,14 @@
 
 Routes: ``web`` (PROXY_URL; arbitrary pages), ``api`` (direct; Exa, OpenRouter),
 ``reddit`` (REDDIT_PROXY_URL) and ``youtube`` (YOUTUBE_PROXY_URL). Clients never follow
-redirects on their own: callers that follow redirects re-validate each hop.
+redirects on their own: callers that follow redirects re-validate each hop. Clients
+never store cookies: they are shared by every caller and every host. Callers that need
+cookies (browser-earned jars) send an explicit Cookie header.
 """
 
 from __future__ import annotations
+
+from http.cookiejar import DefaultCookiePolicy
 
 import httpx
 
@@ -40,6 +44,8 @@ class Net:
             elif proxy := self._proxy(route):
                 kwargs["proxy"] = proxy
             client = self._clients[route] = httpx.AsyncClient(**kwargs)
+            # httpx copies any jar passed in, so the policy must go on the client's own jar.
+            client.cookies.jar.set_policy(DefaultCookiePolicy(allowed_domains=[]))
         return client
 
     async def aclose(self) -> None:
