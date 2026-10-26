@@ -326,7 +326,9 @@ class YouTube:
         key = self.settings.youtube_api_key
         if not key:
             raise Fail(NOT_CONFIGURED, "YOUTUBE_API_KEY is required")
-        response = await self.services.net.client("youtube").get(
+        # The Data API is keyed and never bot-checked, so it skips YOUTUBE_PROXY_URL ("api"
+        # route); only page/caption/audio traffic needs the proxy.
+        response = await self.services.net.client("api").get(
             API_URL + endpoint, params=params, headers={"x-goog-api-key": key}, timeout=15
         )
         if response.status_code >= 400:

@@ -54,10 +54,18 @@ CLOUDFLARE_TUNNEL_TOKEN=...
 `webintel-youtube-api-key` secret containers: run `terraform apply` once after
 upgrading to v3 (additive; nothing is replaced).
 
-**Do not edit `deploy/terraform/scripts/vm-startup.sh` casually:** it is the instance's
-`metadata_startup_script`, which Terraform cannot update in place, so any change recreates
-the VM on the next `terraform apply`. (Its clone URL still says `webintel-mcp`; GitHub
-redirects it to `web-mcp`.)
+**Startup script changes:** `deploy/terraform/scripts/vm-startup.sh` is the instance's
+`metadata_startup_script`, which Terraform can only change by recreating the VM, so
+Terraform ignores it (`lifecycle.ignore_changes`). After editing it, push it in place (no
+reboot, no recreation):
+
+```bash
+gcloud compute instances add-metadata webintel-mcp --zone us-central1-a \
+  --metadata-from-file startup-script=deploy/terraform/scripts/vm-startup.sh
+```
+
+Every boot re-clones `repo-ref` (default `main`) and runs bootstrap, so a reboot deploys
+the latest main.
 
 **Naming:** the product was renamed to Web MCP (`web-mcp`), but live infrastructure
 keeps its original `webintel` identifiers on purpose: GCP resource names (VM
