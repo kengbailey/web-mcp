@@ -64,7 +64,7 @@ SPEECH = [(i * 3.0, f"sentence number {i} is here.") for i in range(60)]  # 3 mi
 def stubs(monkeypatch):
     """Stub the two blocking upstreams (yt-dlp extraction, youtube-transcript-api)."""
     calls = {"info": 0, "api": 0, "stt": 0}
-    state: dict = {"info": make_info(), "api": None, "stt": ("Hello there. " * 80, "nvidia/parakeet-tdt-0.6b-v3")}
+    state: dict = {"info": make_info(), "api": None, "stt": ("Hello there. " * 80, "nvidia/parakeet-tdt-0.6b-v3", [])}
 
     def extract(ident, proxy):
         calls["info"] += 1

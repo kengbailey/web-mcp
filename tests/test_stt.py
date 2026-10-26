@@ -39,7 +39,7 @@ def ok(text: str = "Hello world.") -> httpx.Response:
 
 
 @pytest.mark.asyncio
-async def test_request_shape_has_no_response_format_and_native_filename(monkeypatch):
+async def test_request_shape_asks_for_segments_and_uses_native_filename(monkeypatch):
     seen: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -48,8 +48,8 @@ async def test_request_shape_has_no_response_format_and_native_filename(monkeypa
 
     monkeypatch.setattr(stt, "download", fake_download(".webm"))
     services = build_services(handler, stt_api_key="sk-test")
-    text, model = await stt.transcribe(services, {"language": "en", "duration": 60}, "", None)
-    assert (text, model) == ("Hello there.", PARAKEET)
+    text, model, cues = await stt.transcribe(services, {"language": "en", "duration": 60}, "", None)
+    assert (text, model, cues) == ("Hello there.", PARAKEET, [])
     (request,) = seen
     body = request.content
     assert str(request.url) == URL and request.method == "POST"
@@ -57,7 +57,7 @@ async def test_request_shape_has_no_response_format_and_native_filename(monkeypa
     assert b'name="model"\r\n\r\n' + PARAKEET.encode() in body
     assert b'name="language"\r\n\r\nen' in body
     assert b'filename="audio.webm"' in body and b"Content-Type: audio/webm" in body
-    assert b"response_format" not in body
+    assert b'name="response_format"\r\n\r\nverbose_json' in body and b"\r\n\r\ntext\r\n" not in body
 
 
 @pytest.mark.parametrize(
@@ -75,7 +75,7 @@ async def test_model_routing_by_language(monkeypatch, info_lang, param, model, s
     bodies: list[bytes] = []
     monkeypatch.setattr(stt, "download", fake_download(".m4a"))
     services = build_services(lambda r: bodies.append(r.content) or ok(), stt_api_key="k")
-    _, used = await stt.transcribe(services, {"language": info_lang} if info_lang else {}, param, None)
+    _, used, _ = await stt.transcribe(services, {"language": info_lang} if info_lang else {}, param, None)
     assert used == model
     assert b'filename="audio.m4a"' in bodies[0]
     if sent:
@@ -121,10 +121,10 @@ async def test_small_file_is_one_request_large_file_is_split_and_joined_in_order
     services = build_services(handler, stt_api_key="k")
 
     monkeypatch.setattr(stt, "download", fake_download(size=100))
-    text, _ = await stt.transcribe(services, {}, "en", None)
+    text, _, _ = await stt.transcribe(services, {}, "en", None)
     assert (splits, text) == ([], "whole")  # at the limit: one request, no split
     monkeypatch.setattr(stt, "download", fake_download(size=101))
-    text, _ = await stt.transcribe(services, {}, "en", None)
+    text, _, _ = await stt.transcribe(services, {}, "en", None)
     assert len(splits) == 1
     assert text == "t0 t1 t2 t3 t4 t5"
     assert peak <= stt.CONCURRENCY
@@ -262,3 +262,44 @@ async def test_live_openrouter_parakeet_transcribes_a_short_video(request):
         assert " · stt" in head and "elephant" in body.lower()
     finally:
         await services.aclose()
+
+
+@pytest.mark.asyncio
+async def test_segments_become_timed_cues_offset_across_parts(monkeypatch):
+    replies = iter([
+        {"text": "One. Two.", "duration": 900.0, "segments": [{"start": 0.5, "text": " One."}, {"start": 30.0, "text": "Two."}]},
+        {"text": "Three.", "duration": 120.0, "segments": [{"start": 4.0, "text": "Three."}]},
+    ])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=next(replies))
+
+    async def two_parts(audio, directory):
+        parts = [directory / "part0.webm", directory / "part1.webm"]
+        for part in parts:
+            part.write_bytes(b"x")
+        return parts
+
+    monkeypatch.setattr(stt, "download", fake_download(".webm", size=stt.MAX_UPLOAD + 1))
+    monkeypatch.setattr(stt, "split", two_parts)
+    monkeypatch.setattr(stt, "CONCURRENCY", 1)  # deterministic reply order
+    services = build_services(handler, stt_api_key="k")
+    text, _, cues = await stt.transcribe(services, {"language": "en"}, "", None)
+    assert text == "One. Two. Three."
+    assert cues == [(0.5, "One."), (30.0, "Two."), (904.0, "Three.")]
+
+
+@pytest.mark.asyncio
+async def test_provider_without_verbose_json_gets_one_plain_retry(monkeypatch):
+    bodies = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        bodies.append(request.content)
+        if b"verbose_json" in request.content:
+            return httpx.Response(400, json={"error": "unsupported response_format"})
+        return ok("Plain text only.")
+
+    monkeypatch.setattr(stt, "download", fake_download(".webm"))
+    text, _, cues = await stt.transcribe(build_services(handler, stt_api_key="k"), {"language": "en"}, "", None)
+    assert (text, cues, len(bodies)) == ("Plain text only.", [], 2)
+    assert b"response_format" not in bodies[1]

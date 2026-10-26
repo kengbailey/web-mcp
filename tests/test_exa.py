@@ -86,7 +86,7 @@ async def test_payload_shape_and_rendering():
     assert req.url == "https://api.exa.ai/search" and req.headers["x-api-key"] == "k-secret"
     assert up.payloads[0] == {
         "query": "rust async",
-        "type": "auto",
+        "type": "fast",
         "numResults": 10,
         "contents": {"highlights": {"maxCharacters": 300}, "text": {"maxCharacters": 300}},
         "includeDomains": ["docs.rs/tokio", "example.org"],

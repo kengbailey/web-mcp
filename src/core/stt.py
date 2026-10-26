@@ -216,19 +216,34 @@ async def split(audio: Path, directory: Path) -> list[Path]:
     return parts
 
 
-async def _request(services: Any, path: Path, model: str, language: str) -> str:
+Cue = tuple[float, str]  # (start seconds, text)
+
+
+async def _request(services: Any, path: Path, model: str, language: str) -> tuple[str, list[Cue], float]:
+    """One upload. Returns (text, timed segments, duration seconds).
+
+    Asks for ``verbose_json`` (segment timings, so transcripts get [m:ss] paragraphs);
+    OpenRouter rejects ``text``. A provider that refuses ``verbose_json`` gets one retry
+    with the default JSON, which has text only.
+    """
     s = services.settings
     name, mime = _UPLOAD.get(path.suffix.lower(), ("audio" + path.suffix, "application/octet-stream"))
-    # No response_format: OpenRouter rejects "text"; its default is JSON with a "text" field.
-    data = {"model": model, **({"language": language} if language else {})}
-    with path.open("rb") as handle:
-        response = await services.net.client("api").post(
-            f"{s.stt_endpoint}/audio/transcriptions",
-            data=data,
-            files={"file": (name, handle, mime)},
-            headers={"Authorization": f"Bearer {s.stt_api_key}"},
-            timeout=REQUEST_TIMEOUT,
-        )
+    data = {"model": model, "response_format": "verbose_json", **({"language": language} if language else {})}
+
+    async def post() -> httpx.Response:
+        with path.open("rb") as handle:
+            return await services.net.client("api").post(
+                f"{s.stt_endpoint}/audio/transcriptions",
+                data=data,
+                files={"file": (name, handle, mime)},
+                headers={"Authorization": f"Bearer {s.stt_api_key}"},
+                timeout=REQUEST_TIMEOUT,
+            )
+
+    response = await post()
+    if response.status_code in (400, 422):
+        data.pop("response_format")
+        response = await post()
     if response.status_code == 413:
         raise Fail(TOO_LARGE, "audio segment is too large for speech-to-text")
     if response.status_code != 200:
@@ -239,12 +254,18 @@ async def _request(services: Any, path: Path, model: str, language: str) -> str:
         raise Fail(UPSTREAM_ERROR, "speech-to-text returned invalid JSON") from None
     usage = body.get("usage") or {}
     log.info("stt %s model=%s seconds=%s cost=%s", path.name, model, usage.get("seconds"), usage.get("cost"))
-    return (body.get("text") or "").strip()
+    cues = []
+    for segment in body.get("segments") or []:
+        text = (segment.get("text") or "").strip() if isinstance(segment, dict) else ""
+        if text:
+            cues.append((float(segment.get("start") or 0), text))
+    duration = float(body.get("duration") or usage.get("seconds") or 0)
+    return (body.get("text") or "").strip(), cues, duration
 
 
 async def _transcribe_parts(services: Any, parts: list[Path], model: str, language: str,
-                            progress: Progress) -> list[str]:
-    texts = [""] * len(parts)
+                            progress: Progress) -> list[tuple[str, list[Cue], float]]:
+    texts: list[tuple[str, list[Cue], float]] = [("", [], 0.0)] * len(parts)
     done = 0
     gate = asyncio.Semaphore(CONCURRENCY)
 
@@ -264,8 +285,8 @@ async def _transcribe_parts(services: Any, parts: list[Path], model: str, langua
     return texts
 
 
-async def transcribe(services: Any, info: dict, language: str, progress: Progress) -> tuple[str, str]:
-    """Transcribe a video's audio; returns (text, model)."""
+async def transcribe(services: Any, info: dict, language: str, progress: Progress) -> tuple[str, str, list[Cue]]:
+    """Transcribe a video's audio; returns (text, model, timed cues across all parts)."""
     s = services.settings
     if not s.stt_api_key:
         raise Fail(NOT_CONFIGURED, "STT_API_KEY is required for speech-to-text")
@@ -304,8 +325,13 @@ async def transcribe(services: Any, info: dict, language: str, progress: Progres
             await report(progress, 42, "splitting audio")
             parts = await split(audio, directory)
         await report(progress, 50, f"transcribing {len(parts)} part(s) with {model}")
-        texts = await _transcribe_parts(services, parts, model, language, progress)
-    text = " ".join(t for t in texts if t).strip()
+        results = await _transcribe_parts(services, parts, model, language, progress)
+    text = " ".join(r[0] for r in results if r[0]).strip()
     if not text:
         raise Fail(UNAVAILABLE, "speech-to-text returned no text")
-    return text, model
+    cues: list[Cue] = []
+    offset = 0.0
+    for _, segments, duration in results:
+        cues.extend((offset + start, cue) for start, cue in segments)
+        offset += duration or SEGMENT_SECONDS
+    return text, model, cues

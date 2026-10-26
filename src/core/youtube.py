@@ -43,6 +43,7 @@ API_BLOCK = "yt:transcript-api"
 COMMENTS = "youtube_comments"
 PAGE_SIZE = 20
 MAX_CAPTION_BYTES = 8 * 1024 * 1024
+COMMENTS_TTL = 300  # same as Reddit
 DESCRIPTION_CHARS = 1500  # long descriptions are mostly links/chapters; rest via cursor
 COMMENT_CHARS = 500
 # Caption failures that STT cannot fix (the audio path needs the same extraction).
@@ -458,13 +459,14 @@ class YouTube:
         if not self.settings.stt_api_key:
             raise Fail(NOT_CONFIGURED, "STT_API_KEY is required for speech-to-text")
         info = await self.info(ident)
-        text, model = await stt.transcribe(self.services, info, lang, progress)
-        log.info("stt %s done with %s (%d chars)", ident, model, len(text))
+        text, model, cues = await stt.transcribe(self.services, info, lang, progress)
+        log.info("stt %s done with %s (%d chars, %d segments)", ident, model, len(text), len(cues))
         return {
             "source": "stt",
             "lang": stt.audio_language(info, lang),
             "note": "",
-            "paras": [[None, p] for p in stt_paragraphs(text)],
+            # Timed segments merge like captions ([m:ss] paragraphs); untimed text is chunked.
+            "paras": paragraphs(cues) if cues else [[None, p] for p in stt_paragraphs(text)],
         }
 
     async def transcript(
@@ -569,7 +571,10 @@ class YouTube:
             if len(pending) >= limit or state["next"] is None:
                 break
             params = dict(state["params"], **({"pageToken": state["next"]} if state["next"] else {}))
-            data = await self._api(state["endpoint"], params)
+            page_key = f"yt:cm:page:{state['endpoint']}:{json.dumps(params, sort_keys=True)}"
+            data = await self.services.cache.get_or_load(
+                page_key, COMMENTS_TTL, lambda p=params: self._api(state["endpoint"], p)
+            )
             for item in data.get("items") or []:
                 thread = item.get("snippet") or {}
                 top = thread.get("topLevelComment") or item
