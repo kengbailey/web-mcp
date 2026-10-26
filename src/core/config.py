@@ -1,75 +1,71 @@
-"""
-Configuration management for SearxNG search
-"""
+"""Runtime settings, read once from the environment."""
+
+from __future__ import annotations
 
 import os
+from dataclasses import dataclass
+
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
+)
 
 
-class SearchConfig:
-    """Configuration settings for search functionality."""
-    
-    # Default SearxNG host
-    SEARXNG_HOST = os.getenv('SEARXNG_HOST')
-    
-    # Request timeout settings
-    REQUEST_TIMEOUT = 10
-    
-    # Result limits
-    MAX_GENERAL_RESULTS = 25
-    MAX_VIDEO_RESULTS = 20
-    MAX_SUMMARY_RESULTS = 15
-    
-    # Default result counts
-    DEFAULT_GENERAL_RESULTS = 15
-    DEFAULT_VIDEO_RESULTS = 10
-    DEFAULT_SUMMARY_RESULTS = 5
-    
-    # Web fetching configuration
-    MAX_CONTENT_LENGTH = 30000
-    FETCH_TIMEOUT = 30.0
-    RENDER_TIMEOUT = 30.0  # Timeout for JS rendering with Playwright (seconds)
-    USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    
-    # YouTube STT configuration
-    STT_ENDPOINT = os.getenv('STT_ENDPOINT')
-    STT_MODEL = os.getenv('STT_MODEL')
-    STT_API_KEY = os.getenv('STT_API_KEY')
-    
-    # Proxy configuration (for routing fetch operations through VPN)
-    # Convert empty string to None so httpx/yt-dlp use direct connection
-    PROXY_URL = os.getenv('PROXY_URL') or None
-
-    # YouTube has separate proxy control because datacenter and commercial
-    # VPN exit IPs are bot-checked by YouTube (HTTP 403 / "confirm you're
-    # not a bot") while residential IPs are not. Unset inherits PROXY_URL;
-    # set to empty string to force a direct connection.
-    YOUTUBE_PROXY_URL = (
-        (os.getenv('YOUTUBE_PROXY_URL') or None)
-        if 'YOUTUBE_PROXY_URL' in os.environ
-        else PROXY_URL
-    )
-
-    # Reddit OAuth configuration. Reddit has separate proxy control because
-    # commercial VPN exit nodes are frequently blocked by Reddit.
-    REDDIT_CLIENT_ID = os.getenv('REDDIT_CLIENT_ID')
-    REDDIT_CLIENT_SECRET = os.getenv('REDDIT_CLIENT_SECRET')
-    REDDIT_USER_AGENT = os.getenv(
-        'REDDIT_USER_AGENT',
-        'python:webintel-mcp:v1.0.0'
-    )
-    REDDIT_PROXY_URL = os.getenv('REDDIT_PROXY_URL') or None
+def _env(name: str, default: str | None = None) -> str | None:
+    value = os.getenv(name, "").strip()
+    return value or default
 
 
-class SearchException(Exception):
-    """Custom exception for search-related errors."""
-    pass
+def _int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, ""))
+    except ValueError:
+        return default
 
 
-class SearchRequestException(SearchException):
-    """Exception raised when search request fails."""
-    pass
+def _proxy(name: str, inherit: str | None) -> str | None:
+    """Unset inherits PROXY_URL; set-but-empty forces a direct connection."""
+    return _env(name) if name in os.environ else inherit
 
 
-class SearchParseException(SearchException):
-    """Exception raised when search response parsing fails."""
-    pass
+@dataclass(frozen=True)
+class Settings:
+    exa_api_key: str | None = None
+    youtube_api_key: str | None = None
+    reddit_client_id: str | None = None
+    reddit_client_secret: str | None = None
+    reddit_user_agent: str = "python:web-mcp:v3"
+    proxy_url: str | None = None
+    reddit_proxy_url: str | None = None
+    youtube_proxy_url: str | None = None
+    stt_endpoint: str = "https://openrouter.ai/api/v1"
+    stt_model: str = "nvidia/parakeet-tdt-0.6b-v3"
+    stt_fallback_model: str = "openai/whisper-large-v3-turbo"
+    stt_api_key: str | None = None
+    stt_max_seconds: int = 4 * 3600
+    default_max_chars: int = 8000
+    browser_prewarm: bool = False
+    user_agent: str = USER_AGENT
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        proxy = _env("PROXY_URL")
+        return cls(
+            exa_api_key=_env("EXA_API_KEY"),
+            youtube_api_key=_env("YOUTUBE_API_KEY"),
+            reddit_client_id=_env("REDDIT_CLIENT_ID"),
+            reddit_client_secret=_env("REDDIT_CLIENT_SECRET"),
+            reddit_user_agent=_env("REDDIT_USER_AGENT", cls.reddit_user_agent),
+            proxy_url=proxy,
+            # Reddit blocks many VPN exits, so it does not inherit PROXY_URL.
+            reddit_proxy_url=_env("REDDIT_PROXY_URL"),
+            # YouTube bot-checks datacenter/VPN IPs; it inherits unless overridden.
+            youtube_proxy_url=_proxy("YOUTUBE_PROXY_URL", proxy),
+            stt_endpoint=_env("STT_ENDPOINT", cls.stt_endpoint).rstrip("/"),
+            stt_model=_env("STT_MODEL", cls.stt_model),
+            stt_fallback_model=_env("STT_FALLBACK_MODEL", cls.stt_fallback_model),
+            stt_api_key=_env("STT_API_KEY") or _env("OPENROUTER_API_KEY"),
+            stt_max_seconds=_int("STT_MAX_SECONDS", cls.stt_max_seconds),
+            default_max_chars=min(max(_int("DEFAULT_MAX_CHARS", 8000), 500), 20000),
+            browser_prewarm=_env("BROWSER_PREWARM", "0").lower() in ("1", "true", "yes"),
+        )

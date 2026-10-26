@@ -1,126 +1,56 @@
-"""
-Tests for server transport configuration (PR #7).
+"""Actual loopback HTTP and SSE transport; no external provider calls."""
 
-Covers:
-- resolve_transport: CLI flags, env var, defaults, invalid values
-- resolve_port: CLI override, env var, defaults, invalid values
-- CLI flag precedence over environment variables
-"""
+import asyncio
+import socket
+import sys
 
 import pytest
-from src.server.mcp_server import resolve_transport, resolve_port
+from fastmcp import Client
 
 
-class TestResolveTransport:
-    """Test transport resolution logic."""
-
-    # --- Defaults ---
-
-    def test_default_is_http(self):
-        """Default transport should be http when nothing is specified."""
-        transport, warning = resolve_transport()
-        assert transport == "http"
-        assert warning is None
-
-    # --- CLI flags ---
-
-    def test_cli_http_flag(self):
-        """--http flag should select http transport."""
-        transport, warning = resolve_transport(cli_http=True)
-        assert transport == "http"
-        assert warning is None
-
-    def test_cli_sse_flag(self):
-        """--sse flag should select sse transport."""
-        transport, warning = resolve_transport(cli_sse=True)
-        assert transport == "sse"
-        assert warning is None
-
-    # --- Environment variable ---
-
-    def test_env_http(self):
-        """MCP_TRANSPORT=http should select http."""
-        transport, warning = resolve_transport(env_transport="http")
-        assert transport == "http"
-        assert warning is None
-
-    def test_env_sse(self):
-        """MCP_TRANSPORT=sse should select sse."""
-        transport, warning = resolve_transport(env_transport="sse")
-        assert transport == "sse"
-        assert warning is None
-
-    def test_env_case_insensitive(self):
-        """MCP_TRANSPORT should be case-insensitive."""
-        transport, warning = resolve_transport(env_transport="HTTP")
-        assert transport == "http"
-        assert warning is None
-
-        transport, warning = resolve_transport(env_transport="SSE")
-        assert transport == "sse"
-        assert warning is None
-
-    def test_env_invalid_falls_back_to_http(self):
-        """Invalid MCP_TRANSPORT should fall back to http with a warning."""
-        transport, warning = resolve_transport(env_transport="websocket")
-        assert transport == "http"
-        assert warning is not None
-        assert "websocket" in warning
-
-    def test_env_empty_string_falls_back_to_http(self):
-        """Empty MCP_TRANSPORT should fall back to http (treated as unset)."""
-        transport, warning = resolve_transport(env_transport="")
-        assert transport == "http"
-        assert warning is None
-
-    # --- CLI precedence over env ---
-
-    def test_cli_http_overrides_env_sse(self):
-        """--http flag should override MCP_TRANSPORT=sse."""
-        transport, warning = resolve_transport(cli_http=True, env_transport="sse")
-        assert transport == "http"
-        assert warning is None
-
-    def test_cli_sse_overrides_env_http(self):
-        """--sse flag should override MCP_TRANSPORT=http."""
-        transport, warning = resolve_transport(cli_sse=True, env_transport="http")
-        assert transport == "sse"
-        assert warning is None
-
-    def test_cli_flag_overrides_invalid_env(self):
-        """CLI flag should override an invalid MCP_TRANSPORT without warning."""
-        transport, warning = resolve_transport(cli_http=True, env_transport="garbage")
-        assert transport == "http"
-        assert warning is None
-
-
-class TestResolvePort:
-    """Test port resolution logic."""
-
-    def test_default_port(self):
-        """Default port should be 3090."""
-        assert resolve_port() == 3090
-
-    def test_cli_port_override(self):
-        """CLI --port should override default."""
-        assert resolve_port(cli_port=8080) == 8080
-
-    def test_env_port_override(self):
-        """MCP_PORT env var should override default."""
-        assert resolve_port(env_port="4000") == 4000
-
-    def test_cli_port_overrides_env(self):
-        """CLI --port should take precedence over MCP_PORT env var."""
-        assert resolve_port(cli_port=8080, env_port="4000") == 8080
-
-    def test_invalid_env_port_falls_back_to_default(self):
-        """Non-numeric MCP_PORT should fall back to default."""
-        assert resolve_port(env_port="notanumber") == 3090
-
-    def test_none_env_port_falls_back_to_default(self):
-        """None MCP_PORT should fall back to default."""
-        assert resolve_port(env_port=None) == 3090
-
-    def test_custom_default_port(self):
-        """Custom default port should be used when nothing else is set."""
-        assert resolve_port(default=5000) == 5000
+@pytest.mark.asyncio
+@pytest.mark.parametrize("transport,path", [("http", "/mcp"), ("sse", "/sse")])
+async def test_v2_transport(transport, path):
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "src.server.delivery_server",
+        "--port",
+        str(port),
+        "--transport",
+        transport,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    try:
+        for _ in range(100):
+            if proc.returncode is not None:
+                pytest.fail("Server exited during startup")
+            try:
+                reader, writer = await asyncio.open_connection("127.0.0.1", port)
+                writer.close()
+                await writer.wait_closed()
+                break
+            except OSError:
+                await asyncio.sleep(0.1)
+        else:
+            pytest.fail("Server startup timeout")
+        async with Client(f"http://127.0.0.1:{port}{path}", timeout=10) as client:
+            tools = await client.list_tools()
+            assert len(tools) >= 11
+            bad = await client.call_tool(
+                "read_content", {"cursor": "expired"}, raise_on_error=False
+            )
+            assert bad.is_error
+            assert "CURSOR_EXPIRED" in bad.content[0].text
+    finally:
+        if proc.returncode is None:
+            proc.terminate()
+            try:
+                await asyncio.wait_for(proc.wait(), 5)
+            except TimeoutError:
+                proc.kill()
+                await proc.wait()
