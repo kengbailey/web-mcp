@@ -1,3 +1,6 @@
+> Historical record of the v2 cutover on Oak (2026-09-22). Names here (webintel-mcp
+> container, WEBINTEL_* variables) predate the v3 rename to web-mcp.
+
 # V2 release and Oak cutover
 
 ## What merge does

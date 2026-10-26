@@ -1,16 +1,19 @@
 # AGENTS.md - Project Guidelines for AI Agents
 
 ## Repository Overview
-WebIntel MCP is a FastMCP server providing web search and content retrieval tools.
-- **Stack:** Python 3.11+, FastMCP, Docker
-- **Default entry point:** `src/server/delivery_server.py`; legacy `src/server/mcp_server.py` remains for compatibility/rollback.
-- Legacy SearxNG search results are quality-post-processed (sort/threshold/dedup, applied
-  before `max_results`) in `src/core/result_quality.py` — see its module
-  docstring for the pipeline contract and rationale.
+Web MCP is a FastMCP server providing web search, page/PDF/forum reading, Reddit and YouTube tools.
+- **Stack:** Python 3.11+, FastMCP 4.1, Docker
+- **Entry point:** `src/server/delivery_server.py` (Dockerfile CMD); tools live in `src/server/tools/<area>.py`, logic in `src/core/`.
+- **Output contract:** every tool returns ONE compact text block (no structuredContent, no output schemas).
+  Long text pages via `next: <cursor>` → `read_content`; listings via `more: <cursor>`. Errors are
+  `ERROR <CODE>: <message>` (`src/core/errors.py`). See `doc/v3.md`.
+- Keep the tool catalog small: it is resent to clients every turn; `tests/test_contract.py` enforces a byte budget.
+- Do not reintroduce Jina Reader or JSON envelopes. Live infra identifiers keep their `webintel` names
+  (see `deploy/README.md`).
 
 ## Allowed Actions
 - Modify files in `src/` and `tests/`
-- Add new tools in `src/core/` with corresponding handlers in `src/server/`
+- Add new tools: logic in `src/core/`, registration in `src/server/tools/<area>.py`
 - Update `requirements.txt` for new dependencies
 - Update `README.md` to document new features
 

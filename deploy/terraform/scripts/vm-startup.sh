@@ -24,7 +24,7 @@ systemctl enable --now docker
 
 # --- Clone repo at the pinned ref ---
 rm -rf "$APP_DIR"
-git clone --depth 1 --branch "$REPO_REF" https://github.com/kengbailey/webintel-mcp.git "$APP_DIR"
+git clone --depth 1 --branch "$REPO_REF" https://github.com/kengbailey/web-mcp.git "$APP_DIR"
 
 # --- Fetch secrets + start the stack (re-runnable) ---
 bash "$APP_DIR/deploy/scripts/bootstrap.sh" "$APP_DIR"

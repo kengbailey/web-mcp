@@ -1,52 +1,39 @@
-# Cloud (GCP VM) deployment for WebIntel MCP.
+# Cloud (GCP VM) deployment for Web MCP.
 #
-# Differences vs the bundled docker-compose.yml:
-#   - No Gluetun VPN / --profile vpn: every tool egresses directly through the
-#     VM's datacenter IP (Reddit is direct by design; SearxNG scraping is
-#     direct too -- accept occasional search-engine rate limiting on a
-#     datacenter IP, or swap SearxNG to API-backed engines later).
-#   - OAuth 2.1 (WorkOS AuthKit) + HMAC-JWT auth via env vars
-#     (see src/server/auth.py).
-#   - webintel-mcp binds 127.0.0.1 only; cloudflared is the sole public ingress.
+# Differences vs the LAN docker-compose.yml:
+#   - No Gluetun VPN: every tool egresses directly through the VM's datacenter IP
+#     (YOUTUBE_PROXY_URL can route YouTube through a residential proxy).
+#   - OAuth 2.1 (WorkOS AuthKit) + HMAC-JWT auth via env vars (src/server/auth.py).
+#   - web-mcp binds 127.0.0.1 only; cloudflared is the sole public ingress.
 #
-# Ingress: create a Cloudflare Tunnel in the Zero Trust dashboard, point its
-# public hostname (e.g. https://mcp.example.com) at http://webintel-mcp:3090,
-# and put the tunnel token in CLOUDFLARE_TUNNEL_TOKEN. (Remote-managed tunnel;
-# no local config.yml needed. For file-based config, mount cloudflared/config.yml
-# instead and drop the token.)
+# Ingress: the remote-managed Cloudflare Tunnel's public hostname points at
+# http://webintel-mcp:3090. The service was renamed to web-mcp; the network alias
+# below keeps that tunnel target working until the dashboard is updated.
 #
-# Usage:
-#   cp .env.example .env        # fill in MCP_*, REDDIT_*, STT_*, CLOUDFLARE_TUNNEL_TOKEN
-#   docker compose -f docker-compose.cloud.yml up -d --build
+# Usage (normally run by deploy/scripts/bootstrap.sh):
+#   docker compose -f docker-compose.cloud.yml --env-file /opt/webintel.env up -d --build
 services:
-  searxng:
-    image: docker.io/searxng/searxng:latest
-    container_name: searxng
-    volumes:
-      - ./searxng:/etc/searxng:rw
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-
-  webintel-mcp:
+  web-mcp:
     build: .
-    image: webintel-mcp:latest
-    container_name: webintel-mcp
+    image: web-mcp:latest
+    container_name: web-mcp
     ports:
       - "127.0.0.1:3090:3090"   # localhost only; cloudflared reaches it over the compose network
+    networks:
+      default:
+        aliases: [webintel-mcp]
     environment:
       # Explicit ${VAR:-} interpolation: values come from the file passed via
       # `docker compose --env-file` (see deploy/scripts/bootstrap.sh). Bare
       # pass-through entries (`- VAR`) read only the shell environment, NOT
       # the --env-file, and would silently start the server with auth off.
-      - SEARXNG_HOST=http://searxng:8080
+      - MCP_HOST=0.0.0.0
       - MCP_TRANSPORT=http
+      - EXA_API_KEY=${EXA_API_KEY:-}
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY:-}
       - STT_ENDPOINT=${STT_ENDPOINT:-}
       - STT_MODEL=${STT_MODEL:-}
+      - STT_FALLBACK_MODEL=${STT_FALLBACK_MODEL:-}
       - STT_API_KEY=${STT_API_KEY:-}
       - REDDIT_CLIENT_ID=${REDDIT_CLIENT_ID:-}
       - REDDIT_CLIENT_SECRET=${REDDIT_CLIENT_SECRET:-}
@@ -59,18 +46,16 @@ services:
       - MCP_RESOURCE_URL=${MCP_RESOURCE_URL:-}
       - MCP_REQUIRED_SCOPES=${MCP_REQUIRED_SCOPES:-}
       - MCP_MACHINE_SECRET=${MCP_MACHINE_SECRET:-}
+      # Issuer of already-minted machine JWTs; kept for compatibility.
       - MCP_MACHINE_ISSUER=${MCP_MACHINE_ISSUER:-webintel-internal}
-    depends_on:
-      searxng:
-        condition: service_healthy
     restart: unless-stopped
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: webintel-mcp-cloudflared
+    container_name: web-mcp-cloudflared
     restart: unless-stopped
     command: tunnel run
     environment:
       - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
-      - webintel-mcp
+      - web-mcp

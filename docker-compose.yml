@@ -1,4 +1,4 @@
-# V2 defaults. Existing proxy services can remain during migration.
+# Web MCP (LAN). Copy runtime.env.example to runtime.env (chmod 600) and fill it in.
 services:
   gluetun:
     profiles: ["vpn"]
@@ -22,13 +22,16 @@ services:
     restart: unless-stopped
 
 
-  webintel-mcp:
+  web-mcp:
     build: .
-    image: ${WEBINTEL_IMAGE:-webintel-mcp:latest}
-    container_name: webintel-mcp
+    image: ${WEB_MCP_IMAGE:-web-mcp:latest}
+    container_name: web-mcp
     ports:
       - "${MCP_BIND_ADDRESS:-0.0.0.0}:${MCP_HOST_PORT:-3090}:3090"
+    networks:
+      default:
+        aliases: [webintel-mcp]  # pre-rename name, for existing clients/scripts
     env_file:
-      - path: ${WEBINTEL_ENV_FILE:-./runtime.env}
+      - path: ${WEB_MCP_ENV_FILE:-./runtime.env}
         format: raw
     restart: unless-stopped

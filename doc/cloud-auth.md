@@ -1,6 +1,6 @@
 # Cloud Authentication
 
-WebIntel MCP supports two connection types, composed with FastMCP's `MultiAuth`
+Web MCP supports two connection types, composed with FastMCP's `MultiAuth`
 (see `src/server/auth.py`):
 
 1. **OAuth 2.1 (WorkOS AuthKit, DCR)** — interactive clients (OpenWebUI,

@@ -76,6 +76,8 @@ locals {
     "webintel-stt-endpoint",
     "webintel-stt-model",
     "webintel-stt-api-key",
+    "webintel-exa-api-key",
+    "webintel-youtube-api-key",
     "webintel-cloudflare-tunnel-token",
   ]
 }

@@ -10,7 +10,7 @@ from fastmcp import Client
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("transport,path", [("http", "/mcp"), ("sse", "/sse")])
-async def test_v2_transport(transport, path):
+async def test_transport(transport, path):
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
@@ -40,7 +40,7 @@ async def test_v2_transport(transport, path):
             pytest.fail("Server startup timeout")
         async with Client(f"http://127.0.0.1:{port}{path}", timeout=10) as client:
             tools = await client.list_tools()
-            assert len(tools) >= 11
+            assert len(tools) == 12
             bad = await client.call_tool(
                 "read_content", {"cursor": "expired"}, raise_on_error=False
             )

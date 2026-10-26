@@ -1,9 +1,0 @@
-services:
-  webintel-mcp:
-    image: ghcr.io/kengbailey/webintel-mcp:latest
-    container_name: webintel-mcp
-    ports:
-      - "3090:3090"
-    environment:
-      - SEARXNG_HOST=http://localhost:8189
-    restart: unless-stopped
