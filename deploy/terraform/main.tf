@@ -129,4 +129,12 @@ resource "google_compute_instance" "webintel" {
   }
 
   metadata_startup_script = file("${path.module}/scripts/vm-startup.sh")
+
+  lifecycle {
+    # metadata_startup_script forces replacement when it changes. Script edits are pushed
+    # in place instead (deploy/README.md):
+    #   gcloud compute instances add-metadata webintel-mcp --zone us-central1-a \
+    #     --metadata-from-file startup-script=deploy/terraform/scripts/vm-startup.sh
+    ignore_changes = [metadata_startup_script]
+  }
 }

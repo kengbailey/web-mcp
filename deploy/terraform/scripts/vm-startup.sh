@@ -13,7 +13,8 @@ apt-get install -y ca-certificates curl gnupg python3 git lsb-release
 
 # --- Docker Engine + Compose plugin ---
 install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+# --batch --yes: overwrite the keyring on reboots instead of prompting (no tty -> exit 2).
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
 chmod a+r /etc/apt/keyrings/docker.gpg
 CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu ${CODENAME} stable" \
@@ -24,7 +25,7 @@ systemctl enable --now docker
 
 # --- Clone repo at the pinned ref ---
 rm -rf "$APP_DIR"
-git clone --depth 1 --branch "$REPO_REF" https://github.com/kengbailey/webintel-mcp.git "$APP_DIR"
+git clone --depth 1 --branch "$REPO_REF" https://github.com/kengbailey/web-mcp.git "$APP_DIR"
 
 # --- Fetch secrets + start the stack (re-runnable) ---
 bash "$APP_DIR/deploy/scripts/bootstrap.sh" "$APP_DIR"
